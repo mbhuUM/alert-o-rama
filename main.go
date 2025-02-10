@@ -1,110 +1,84 @@
 package main
 
 import (
-	"fmt"
-	"github.com/gocolly/colly"
-	"encoding/csv"
-    "os"
 	"log" 
-	"net/http" 
-    "crypto/tls"  
+	"fmt"
 	"github.com/playwright-community/playwright-go"
+	"time"
 
 )
-
 type Product struct {
-	    Url, Image, Name, Price string
-	}
+    Name  string
+    Price string
+    URL   string
+    Image string
+}
 
 func main() {
-	var products []Product 
-
-    transport := &http.Transport{
-        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	pw, err := playwright.Run()
+    if err != nil {
+        log.Fatalf("could not start playwright: %v", err)
     }
-	c := colly.NewCollector(
-        colly.AllowedDomains("www.pokemoncenter.com"),
-	)
+    defer pw.Stop()
 
-    c.WithTransport(transport)
+	headless := false
+    browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+        Headless: &headless, // Set to false to see the browser window
+    })
+	if err != nil {
+        log.Fatalf("could not launch browser: %v", err)
+    }
+    defer browser.Close()
 
-	c.OnError(func(_ *colly.Response, err error) {
-		log.Println("Something went wrong:", err)
-	})
+    page, err := browser.NewPage()
+    if err != nil {
+        log.Fatalf("could not create page: %v", err)
+    }
 
-	// called before an HTTP request is triggered
-	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting: ", r.URL)
-		r.Headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
-        r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-        r.Headers.Set("Accept-Language", "en-US,en;q=0.5")
-        r.Headers.Set("Accept-Encoding", "gzip, deflate, br")
-        r.Headers.Set("Connection", "keep-alive")
-        r.Headers.Set("Upgrade-Insecure-Requests", "1")
-        r.Headers.Set("Sec-Fetch-Dest", "document")
-        r.Headers.Set("Sec-Fetch-Mode", "navigate")
-        r.Headers.Set("Sec-Fetch-Site", "none")
-        r.Headers.Set("Sec-Fetch-User", "?1")
-        fmt.Println("Making request to:", r.URL)
-	})
-
-	c.OnResponse(func(r *colly.Response) {
-		fmt.Printf("Response received: %s\n", r.Body)
-	})
-
-	c.OnHTML(".product--feNDW", func(e *colly.HTMLElement) {
-		// initialize a new Product instance
-		product := Product{}
-		fmt.Println("OnHtml")
-		// scrape the target data
-		product.Url = e.ChildAttr("a", "href")
-		product.Image = e.ChildAttr("product-image", "src")
-		product.Name = e.ChildText(".product-title")
-		product.Price = e.ChildText(".product-price")
-
-		// add the product instance with scraped data to the list of products
-		products = append(products, product)
-	})
-	
-	c.OnScraped(func(r *colly.Response) {
-
-        // open the CSV file
-        file, err := os.Create("products.csv")
-        if err != nil {
-            log.Fatalln("Failed to create output CSV file", err)
-        }
-        defer file.Close()
-
-        // initialize a file writer
-        writer := csv.NewWriter(file)
-
-        // write the CSV headers
-        headers := []string{
-            "Url",
-            "Image",
-            "Name",
-            "Price",
-        }
-        writer.Write(headers)
-
-        // write each product as a CSV row
-        for _, product := range products {
-            // convert a Product to an array of strings
-            record := []string{
-                product.Url,
-                product.Image,
-                product.Name,
-                product.Price,
-            }
-
-            // add a CSV record to the output file
-            writer.Write(record)
-        }
-        defer writer.Flush()
+	 // Add headers
+	 _ = page.SetExtraHTTPHeaders(map[string]string{
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
     })
 
-	c.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-	
-	
-	c.Visit("https://www.pokemoncenter.com/category/tcg-cards")
+    if err != nil {
+        log.Fatalf("could not set headers: %v", err)
+    }
+
+    if _, err = page.Goto("https://www.pokemoncenter.com/category/tcg-cards", playwright.PageGotoOptions{
+        WaitUntil: playwright.WaitUntilStateNetworkidle,
+        Timeout:   playwright.Float(30000),
+    }); err != nil {
+        log.Fatalf("could not goto: %v", err)
+    }
+
+	// Get and print the page title
+	title, err := page.Title()
+	if err != nil {
+		log.Fatalf("could not get page title: %v", err)
+	}
+	fmt.Printf("Page title: %s\n", title)
+
+	// Get and print the current URL (to check for redirects)
+	url := page.URL()
+	fmt.Printf("Current URL: %s\n", url)
+
+	// Print the page content to see what we're actually getting
+	content, err := page.Content()
+	if err != nil {
+		log.Fatalf("could not get page content: %v", err)
+	}
+	defer browser.Close()
+
+	time.Sleep(1000 * time.Second)
+    fmt.Println("Browser launched successfully")
+	fmt.Printf("First 500 characters of page content:\n%s\n", content[:500])
+
 }

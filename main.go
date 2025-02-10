@@ -22,8 +22,12 @@ func main() {
     defer pw.Stop()
 
 	headless := false
-    browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-        Headless: &headless, // Set to false to see the browser window
+	userAgent := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+        Headless: &headless,
+        Args: []string{
+            fmt.Sprintf("--user-agent=%s", userAgent),
+        },
     })
 	if err != nil {
         log.Fatalf("could not launch browser: %v", err)
@@ -34,7 +38,6 @@ func main() {
     if err != nil {
         log.Fatalf("could not create page: %v", err)
     }
-
 	 // Add headers
 	 _ = page.SetExtraHTTPHeaders(map[string]string{
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
